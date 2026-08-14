@@ -2,11 +2,19 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Setting;
+use App\Services\CapabilityService;
+use App\Services\MenuService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(
+        private CapabilityService $capabilities,
+        private MenuService $menus,
+    ) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -35,12 +43,23 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
+        $settings = Setting::where('autoload', true)->pluck('value', 'key');
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'capabilities' => $user ? $this->capabilities->allFor($user) : [],
             ],
+            'site' => [
+                'title' => $settings['site_title'] ?? config('app.name'),
+                'tagline' => $settings['tagline'] ?? '',
+                'posts_per_page' => (int) ($settings['posts_per_page'] ?? 10),
+            ],
+            'menus' => $this->menus->all(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
